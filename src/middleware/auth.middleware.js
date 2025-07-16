@@ -29,21 +29,8 @@ export const verifyJWT = asyncHandler(async (req, res, next) => {
     }
 });
 export const verifyAdmin = asyncHandler(async (req, res, next) => {
-    try {
-        // Debug log
-        console.log("User role check:", {
-            userId: req.user?._id,
-            role: req.user?.role,
-            isAdmin: req.user?.role === "admin"
-        });
-
-        if (req.user?.role !== "admin") {
-            throw new ApiError(403, "Only administrators can perform this action");
-        }
-
-        next();
-    } catch (error) {
-        throw new ApiError(403, error?.message || "Admin verification failed");
+    if (req.user.role !== "admin") {
+        throw new ApiError(403, "Access denied. Admins only.");
     }
-});
- 
+    next();
+}); 

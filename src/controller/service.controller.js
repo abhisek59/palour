@@ -7,15 +7,18 @@ import { uploadOnCloudinary } from "../utils/cloudnary.js";
 
 const createService = asyncHandler(async(req, res) => {
    try {
+    console.log("hahahah")
      // Check if user is authenticated
         if (!req.user) {
             throw new ApiError(401, "Authentication required");
         }
+        console.log("Authenticated user:", req.user);
 
         // Check if user has admin rights
-        if (req.user.isAdmin !== "admin") {
+        if (req.user.role!=="admin") {
             throw new ApiError(403, "Only administrators can create services");
         }
+        console.log("Admin user:", req.user);
      const { 
             name,
             description,
@@ -48,25 +51,25 @@ const createService = asyncHandler(async(req, res) => {
      if (price < 0 || duration < 0) {
          throw new ApiError(405, "Price and duration must be positive numbers");
      }
- 
-     if (!req.file) {
+     console.log("this is req body",req.body);
+
+     // Check for image file in req.files
+     const imagepath = req.files?.imageFile?.[0]?.path;
+     if(!imagepath){
          throw new ApiError(407, "Service image is required");
      }
- 
+
      // Log file info for debugging
      console.log("Uploaded file:", {
-         path: req.file.path,
-         mimetype: req.file.mimetype,
-         size: req.file.size
+         path: imagepath,
+         mimetype: req.files?.imageFile?.[0]?.mimetype,
+         size: req.files?.imageFile?.[0]?.size
      });
-        const imagepath = req.files?.imageFile?.[0]?.path;
-        if(!imagepath){
-         throw new ApiError(409,"Service image is required")
-        }
-        const uploadImage = await uploadOnCloudinary(imagepath);
-        if(!uploadImage?.url){
+
+     const uploadImage = await uploadOnCloudinary(imagepath);
+     if(!uploadImage?.url){
          throw new ApiError(503, "Image upload service unavailable");
-        }    
+     }    
  
  
      // [201] Created - Service Creation
@@ -159,75 +162,60 @@ const getServiceById = asyncHandler(async (req, res) => {
     );
 });
 const updateService = asyncHandler(async (req, res) => {
-    const { serviceId } = req.params;   
-    const { 
-        name, 
-        description, 
-        price, 
-        category, 
-        duration, 
-        prerequisites, 
-        aftercare,
-        availableFor,
-        staffRequired,
-        availableSlots,
-        tags,
-        isActive
-    } = req.body;   
+    const { serviceId } = req.params;
     if (!serviceId) {
         throw new ApiError(400, "Service ID is required");
-    }   
-    // Validate all required fields
-    if (!name?.trim() ||
-        !description?.trim() || 
-        !price || 
-        !category || 
-        !duration) {
-        throw new ApiError(400, "Required fields are missing");
-    }   
-    // Validate price and duration are positive numbers
-    if (price < 0 || duration < 0) {
-        throw new ApiError(400, "Price and duration must be positive numbers");
-    }   
+    }
     // Check if service exists
     const service = await Service.findById(serviceId);
     if (!service) {
         throw new ApiError(404, "Service not found");
-    }   
+    }
+    // Build update object only with provided fields
+    const updateObj = {};
+    const fields = [
+        "name", "description", "price", "category", "duration", "prerequisites", "aftercare", "availableFor", "staffRequired", "availableSlots", "tags", "isActive"
+    ];
+    fields.forEach(field => {
+        if (req.body[field] !== undefined) {
+            if (["name", "description", "prerequisites", "aftercare"].includes(field)) {
+                updateObj[field] = req.body[field]?.trim();
+            } else if (["price", "duration", "staffRequired", "availableSlots"].includes(field)) {
+                updateObj[field] = Number(req.body[field]);
+            } else if (field === "tags") {
+                updateObj[field] = req.body.tags?.split(',').map(tag => tag.trim()) || [];
+            } else {
+                updateObj[field] = req.body[field];
+            }
+        }
+    });
+    // Validate price and duration if provided
+    if (updateObj.price !== undefined && updateObj.price < 0) {
+        throw new ApiError(400, "Price must be a positive number");
+    }
+    if (updateObj.duration !== undefined && updateObj.duration < 0) {
+        throw new ApiError(400, "Duration must be a positive number");
+    }
     // Handle image upload if provided
-    let uploadedImageUrl = service.image; // Keep existing image if not updated
+    let uploadedImageUrl = service.image;
     if (req.files?.image && req.files.image.length > 0) {
         const postImage = req.files.image[0].path;
         if (!postImage) {
             throw new ApiError(400, "Service image is required");
         }
-        // Upload new image to Cloudinary
         const uploadedImage = await uploadOnCloudinary(postImage);
         if (!uploadedImage?.url) {
-            throw new ApiError(500, "Error uploading image");   
+            throw new ApiError(500, "Error uploading image");
         }
-        uploadedImageUrl = uploadedImage.url; // Update with new image URL
-    }   
-    // Update service with all fields
+        uploadedImageUrl = uploadedImage.url;
+        updateObj.image = uploadedImageUrl;
+    }
+    // Update service with provided fields only
     const updatedService = await Service.findByIdAndUpdate(
         serviceId,
-        {
-            name,
-            description,        
-            price,
-            category,
-            duration,
-            prerequisites: prerequisites?.trim(),
-            aftercare: aftercare?.trim(),
-            image: uploadedImageUrl,
-            availableFor: availableFor || "all",
-            staffRequired: staffRequired || 1,
-            availableSlots: availableSlots || 1,
-            tags: tags?.split(',').map(tag => tag.trim()) || [],
-            isActive: isActive !== undefined ? isActive : service.isActive // Preserve existing value
-        },
+        updateObj,
         { new: true, runValidators: true }
-    );  
+    );
     if (!updatedService) {
         throw new ApiError(404, "Service not found");
     }
