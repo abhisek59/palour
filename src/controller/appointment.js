@@ -6,11 +6,12 @@ import { User } from "../models/user.models.js";
 import { Service } from "../models/service.models.js";
 
 const createAppointment = asyncHandler(async (req, res) => {
-    const { userId, guestName, guestPhone, serviceId, appointmentDate, appointmentTime, staffId, notes, price, duration, rating, review } = req.body;
+    let { serviceId, appointmentDate, appointmentTime, staffId, notes, price, duration, rating, review } = req.body;
+    const userId = req.user._id;
 
-    // Validate required fields for guest or logged-in user
-    if ((!userId && !guestName) || !serviceId || !appointmentDate || !appointmentTime) {
-        throw new ApiError(400, "User ID or guest name, Service ID, Appointment Date, and Appointment Time are required");
+    // Validate required fields for logged-in user
+    if (!userId || !serviceId || !appointmentDate || !appointmentTime) {
+        throw new ApiError(400, "User ID, Service ID, Appointment Date, and Appointment Time are required");
     }
 
     // 2. Service existence check
@@ -31,7 +32,7 @@ const createAppointment = asyncHandler(async (req, res) => {
     // 1. Double booking prevention (user or staff at same date/time)
     const conflict = await Appointment.findOne({
         $or: [
-            userId ? { userId, appointmentDate, appointmentTime } : null,
+            { userId, appointmentDate, appointmentTime },
             staffId ? { staffId, appointmentDate, appointmentTime } : null
         ].filter(Boolean)
     });
@@ -50,15 +51,13 @@ const createAppointment = asyncHandler(async (req, res) => {
     const queueNumber = queueCount + 1;
 
     // 4. Role-based access: Only allow users to create their own appointments
-    if (userId && req.user && req.user.role !== 'admin' && req.user._id.toString() !== userId) {
+    if (req.user && req.user.role !== 'admin' && req.user._id.toString() !== userId.toString()) {
         throw new ApiError(403, "You are not allowed to create appointments for other users");
     }
 
     // Create the appointment
     const appointment = await Appointment.create({
-        userId: userId || undefined,
-        guestName: guestName || undefined,
-        guestPhone: guestPhone || undefined,
+        userId,
         serviceId,
         appointmentDate,
         appointmentTime,
@@ -76,7 +75,8 @@ const createAppointment = asyncHandler(async (req, res) => {
 });
 
 const cancelAppointment = asyncHandler(async (req, res) => {
-    const { appointmentId, cancellationReason } = req.body; 
+    const {appointmentId}=req.params;
+    const {  cancellationReason } = req.body; 
     if (!appointmentId) {
         throw new ApiError(400, "Appointment ID is required");
     }
@@ -180,6 +180,19 @@ const updateAppointment = asyncHandler(async (req, res) => {
     return res.status(200)
         .json(new ApiResponse(200, appointment, "Appointment updated successfully"));
 });
+const staffAppointments = asyncHandler(async (req, res) => {
+    const { staffId } = req.params;
+    const appointments = await Appointment.find({ staffId }).populate("serviceId").populate("userId");
+    return res.status(200)
+        .json(new ApiResponse(200, {
+            count: appointments.length,
+            appointments
+        }, "Staff appointments retrieved successfully"));
+});
+
+
+
+
 
 export { 
     createAppointment,
@@ -187,5 +200,6 @@ export {
     myAppointments,
     getAllAppointments,
     getAppointmentById,
-    updateAppointment
+    updateAppointment,
+    staffAppointments
 };

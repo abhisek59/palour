@@ -2,7 +2,6 @@ import { User } from "../models/user.models.js";
 import { ApiError } from "../utils/apiError.js";
 import { ApiResponse } from "../utils/apiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
-// ...rest of the code
 import jwt from "jsonwebtoken";
 
 const generateAccessAndRefereshTokens = async(userId) => {
@@ -226,6 +225,48 @@ const updateAccountDetails = asyncHandler(async (req, res) => {
     );
 });
 
+// Add a new experience to staff
+const addExperience = asyncHandler(async (req, res) => {
+    const { title, description, startDate, endDate, salon } = req.body;
+    if (!title) {
+        throw new ApiError(400, "Experience title is required");
+    }
+    const user = await User.findById(req.user._id);
+    if (!user) throw new ApiError(404, "User not found");
+    if (user.role !== "staff") throw new ApiError(403, "Only staff can add experiences");
+    user.experiences.push({ title, description, startDate, endDate, salon });
+    await user.save();
+    return res.status(201).json(new ApiResponse(201, user.experiences, "Experience added successfully"));
+});
+
+// Update an experience by index
+const updateExperience = asyncHandler(async (req, res) => {
+    const { expIndex } = req.params;
+    const { title, description, startDate, endDate, salon } = req.body;
+    const user = await User.findById(req.user._id);
+    if (!user) throw new ApiError(404, "User not found");
+    if (user.role !== "staff") throw new ApiError(403, "Only staff can update experiences");
+    if (!user.experiences[expIndex]) throw new ApiError(404, "Experience not found");
+    if (title !== undefined) user.experiences[expIndex].title = title;
+    if (description !== undefined) user.experiences[expIndex].description = description;
+    if (startDate !== undefined) user.experiences[expIndex].startDate = startDate;
+    if (endDate !== undefined) user.experiences[expIndex].endDate = endDate;
+    if (salon !== undefined) user.experiences[expIndex].salon = salon;
+    await user.save();
+    return res.status(200).json(new ApiResponse(200, user.experiences, "Experience updated successfully"));
+});
+
+// Remove an experience by index
+const removeExperience = asyncHandler(async (req, res) => {
+    const { expIndex } = req.params;
+    const user = await User.findById(req.user._id);
+    if (!user) throw new ApiError(404, "User not found");
+    if (user.role !== "staff") throw new ApiError(403, "Only staff can remove experiences");
+    if (!user.experiences[expIndex]) throw new ApiError(404, "Experience not found");
+    user.experiences.splice(expIndex, 1);
+    await user.save();
+    return res.status(200).json(new ApiResponse(200, user.experiences, "Experience removed successfully"));
+});
 
 export {
     signup,
@@ -233,5 +274,8 @@ export {
     logout,
     accessRefreshToken,
     changePassword,
-    updateAccountDetails
+    updateAccountDetails,
+    addExperience,
+    updateExperience,
+    removeExperience
 }

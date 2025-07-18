@@ -85,7 +85,16 @@ const userSchema = new Schema({
         type: String,
         enum: ["active", "inactive", "blocked"],
         default: "active"
-    }
+    },
+    experiences: [
+        {
+            title: { type: String, required: true },
+            description: { type: String },
+            startDate: { type: Date },
+            endDate: { type: Date },
+            salon: { type: String },
+        }
+    ], // Only relevant for staff
 }, { 
     timestamps: true 
 });
